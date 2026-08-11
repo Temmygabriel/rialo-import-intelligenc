@@ -1,0 +1,16 @@
+import { Product, Marketplace, Supplier } from '@/lib/types';
+
+export interface MarketplaceAdapter { marketplace: Marketplace; canHandle(url: URL): boolean; normalizeUrl(url: URL): string; extractProduct(url: URL): Promise<Product>; extractSupplier(product: Product): Promise<Supplier | undefined>; }
+const now = () => new Date().toISOString();
+const id = (prefix: string, value: string) => `${prefix}_${Buffer.from(value).toString('base64url').slice(0, 14)}`;
+
+function unavailableProduct(url: URL, marketplace: Marketplace, name: string): Product {
+  return { id: id('prod', url.href), url: url.href, normalizedUrl: url.href, marketplace, name, currency: marketplace === 'Alibaba' ? 'USD' : 'CNY', extractionStatus: 'UNKNOWN', warnings: ['Marketplace live extraction is unavailable in the free MVP. Use manual inputs for weight, dimensions, category, and declared value.'], updatedAt: now(), demoMode: false };
+}
+function supplierUnavailable(product: Product): Supplier { return { id: id('sup', product.normalizedUrl), name: 'Supplier data unavailable', marketplace: product.marketplace, dataStatus: 'UNKNOWN', evidence: [{ label: 'Live supplier extraction', value: 'Unavailable in free MVP', status: 'UNKNOWN', confidence: 'LOW', impact: 'neutral', source: 'Marketplace adapter' }], score: { score: null, riskLevel: 'UNKNOWN', confidence: 'LOW', explanation: ['No verified supplier evidence was retrieved. Manual supplier verification is required before purchase.'], missingEvidence: ['store age','review rating','review volume','transaction indicators','manufacturer/trader status'] } }; }
+
+const hosts: Record<Marketplace, string[]> = { '1688': ['1688.com'], Taobao: ['taobao.com','tmall.com'], Pinduoduo: ['pinduoduo.com','yangkeduo.com','pdd.com'], Alibaba: ['alibaba.com'] };
+function adapter(marketplace: Marketplace, demoName: string): MarketplaceAdapter { return { marketplace, canHandle(url) { return hosts[marketplace].some((h) => url.hostname.endsWith(h)); }, normalizeUrl(url) { url.hash=''; return url.toString(); }, async extractProduct(url) { return unavailableProduct(url, marketplace, demoName); }, async extractSupplier(product) { return supplierUnavailable(product); } }; }
+export const marketplaceAdapters: MarketplaceAdapter[] = [adapter('1688','1688 product — details unavailable'), adapter('Taobao','Taobao product — details unavailable'), adapter('Pinduoduo','Pinduoduo product — details unavailable'), adapter('Alibaba','Alibaba product — details unavailable')];
+export function detectMarketplace(input: string) { let url: URL; try { url = new URL(input); } catch { throw new Error('Enter a valid product URL.'); } if (!['http:','https:'].includes(url.protocol)) throw new Error('Only http(s) marketplace URLs are supported.'); const adapter = marketplaceAdapters.find((a) => a.canHandle(url)); if (!adapter) throw new Error('Unsupported marketplace. Paste a 1688, Taobao, Pinduoduo, or Alibaba product URL.'); return { url, adapter }; }
+export async function analyzeMarketplaceProduct(input: string): Promise<Product> { const { url, adapter } = detectMarketplace(input); const normalizedUrl = adapter.normalizeUrl(new URL(url.toString())); const product = await adapter.extractProduct(new URL(normalizedUrl)); const supplier = await adapter.extractSupplier(product); return { ...product, normalizedUrl, supplier }; }

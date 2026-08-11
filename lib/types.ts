@@ -1,0 +1,17 @@
+export type Marketplace = '1688' | 'Taobao' | 'Pinduoduo' | 'Alibaba';
+export type Confidence = 'HIGH' | 'MEDIUM' | 'LOW';
+export type EvidenceStatus = 'KNOWN' | 'ESTIMATED' | 'USER_PROVIDED' | 'REQUIRES_QUOTE' | 'UNKNOWN';
+export type CostCategory = 'PRODUCT'|'CHINA_DOMESTIC'|'WAREHOUSE'|'QC'|'CONSOLIDATION'|'SEA_FREIGHT'|'AIR_FREIGHT'|'CUSTOMS'|'TAX'|'CLEARING'|'DESTINATION'|'LOCAL_DELIVERY'|'INSURANCE'|'OTHER';
+export type ShippingPreference = 'recommend'|'sea'|'air';
+export type DeliveryPreference = 'pickup'|'local_delivery';
+export type ProcurementState = 'DRAFT'|'QUOTE_CREATED'|'SUPPLIER_SELECTED'|'PROCUREMENT_STARTED'|'WAREHOUSE_PENDING'|'WAREHOUSE_RECEIVED'|'QC_PENDING'|'QC_PASSED'|'QC_FAILED'|'SHIPPING_PENDING'|'SHIPPING_BOOKED'|'IN_TRANSIT'|'ARRIVED_NIGERIA'|'DELIVERY_PENDING'|'COMPLETED'|'CANCELLED';
+
+export interface Product { id: string; url: string; normalizedUrl: string; marketplace: Marketplace; name: string; imageUrl?: string; priceLow?: number; priceHigh?: number; currency: 'CNY'|'USD'|'NGN'; moq?: number; weightKg?: number; dimensionsCm?: { length: number; width: number; height: number }; category?: string; supplier?: Supplier; extractionStatus: EvidenceStatus; warnings: string[]; updatedAt: string; demoMode: boolean; }
+export interface Supplier { id: string; name: string; marketplace: Marketplace; url?: string; dataStatus: EvidenceStatus; evidence: SupplierEvidence[]; score: SupplierScore; }
+export interface SupplierEvidence { label: string; value: string; status: EvidenceStatus; confidence: Confidence; impact: 'positive'|'neutral'|'negative'; source: string; }
+export interface SupplierScore { score: number | null; riskLevel: 'LOW'|'MEDIUM'|'HIGH'|'UNKNOWN'; confidence: Confidence; explanation: string[]; missingEvidence: string[]; }
+export interface CostComponent { name: string; category: CostCategory; amountLow: number; amountHigh: number; currency: 'NGN'; status: EvidenceStatus; source: string; confidence: Confidence; assumptions: string[]; updatedAt: string; }
+export interface FreightOption { mode: 'SEA'|'AIR'; totalLow: number; totalHigh: number; freightOnlyLow: number; freightOnlyHigh: number; transitDaysLow: number; transitDaysHigh: number; chargeable: { value: number; unit: 'CBM'|'KG'; actualWeightKg?: number; volumetricWeightKg?: number; cbm?: number }; components: CostComponent[]; warnings: string[]; confidence: Confidence; }
+export interface CostEstimate { id: string; productId: string; quantity: number; destination: string; shippingPreference: ShippingPreference; deliveryPreference: DeliveryPreference; product: Product; sea: FreightOption; air: FreightOption; recommendedMode: 'SEA'|'AIR'; recommendation: string; totalLow: number; totalHigh: number; currency: 'NGN'; confidence: Confidence; assumptions: string[]; warnings: string[]; demoMode: boolean; createdAt: string; }
+export interface ProcurementEvent { id: string; procurementId: string; type: string; previousState: ProcurementState; newState: ProcurementState; data: Record<string, unknown>; timestamp: string; verified: boolean; }
+export interface Procurement { id: string; estimateId: string; state: ProcurementState; productName: string; destination: string; selectedMode: 'SEA'|'AIR'; totalLow: number; totalHigh: number; currency: 'NGN'; rialoWorkflowId?: string; rialoStatus: 'MOCKED'|'DISCONNECTED'|'CONNECTED'; events: ProcurementEvent[]; createdAt: string; updatedAt: string; }
