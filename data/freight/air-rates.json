@@ -1,0 +1,5 @@
+[
+ {"origin":"Guangzhou","destination":"Lagos","mode":"AIR","pricingBasis":"KG","rateLow":7200,"rateHigh":9800,"currency":"NGN","minimum":10,"transitDaysLow":7,"transitDaysHigh":15,"volumetricDivisor":6000,"effectiveDate":"2026-08-01","source":"Demo reference rate table","notes":"Air cargo reference estimate only; restrictions require quote."},
+ {"origin":"Shenzhen","destination":"Lagos","mode":"AIR","pricingBasis":"KG","rateLow":7600,"rateHigh":10200,"currency":"NGN","minimum":10,"transitDaysLow":7,"transitDaysHigh":15,"volumetricDivisor":6000,"effectiveDate":"2026-08-01","source":"Demo reference rate table","notes":"Air cargo reference estimate only; restrictions require quote."},
+ {"origin":"Yiwu","destination":"Lagos","mode":"AIR","pricingBasis":"KG","rateLow":8200,"rateHigh":11200,"currency":"NGN","minimum":10,"transitDaysLow":8,"transitDaysHigh":16,"volumetricDivisor":6000,"effectiveDate":"2026-08-01","source":"Demo reference rate table","notes":"Air cargo reference estimate only; restrictions require quote."}
+]
