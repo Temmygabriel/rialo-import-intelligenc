@@ -5,6 +5,8 @@ import { estimateCosts } from '@/lib/costs/estimator';
 import { scoreSupplier } from '@/lib/suppliers/scoring';
 import { transitionProcurement } from '@/lib/procurement/state-machine';
 import { MockRialoAdapter } from '@/lib/rialo/adapter';
+import { db } from '@/lib/db/memory';
+import { POST as createProcurement } from '@/app/api/procurement/route';
 import type { Procurement } from '@/lib/types';
 
 describe('marketplace adapters', () => {
@@ -42,6 +44,17 @@ describe('cost estimator', () => {
     expect(estimate.totalHigh).toBeGreaterThan(estimate.totalLow);
     expect(estimate.assumptions.join(' ')).toMatch(/Customs classification/);
   });
+
+  it('creates procurement workflow against the actual procurement id', async () => {
+    const estimate = estimateCosts({ product, quantity: 2, destination: 'Lagos', shippingPreference: 'sea', deliveryPreference: 'pickup', weightKg: 1, lengthCm: 20, widthCm: 20, heightCm: 20, declaredValue: 100000 });
+    db.saveEstimate(estimate);
+    const response = await createProcurement(new Request('http://localhost/api/procurement', { method: 'POST', body: JSON.stringify({ estimateId: estimate.id }) }));
+    const json = await response.json();
+    expect(json.ok).toBe(true);
+    expect(json.data.rialoWorkflowId).toBe(`mock_workflow_${json.data.id}`);
+    expect(json.data.events[0].procurementId).toBe(json.data.id);
+  });
+
   it('flags customs uncertainty and demo rates', () => {
     const estimate = estimateCosts({ product, quantity: 1, destination: 'Abuja', shippingPreference: 'air', deliveryPreference: 'local_delivery', weightKg: 1, lengthCm: 20, widthCm: 20, heightCm: 20, declaredValue: 100000 });
     expect(estimate.demoMode).toBe(true);
