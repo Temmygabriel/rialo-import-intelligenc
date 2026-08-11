@@ -7,6 +7,8 @@ import { transitionProcurement } from '@/lib/procurement/state-machine';
 import { MockRialoAdapter } from '@/lib/rialo/adapter';
 import { db } from '@/lib/db/memory';
 import { POST as createProcurement } from '@/app/api/procurement/route';
+import { GET as getProcurement } from '@/app/api/procurement/[id]/route';
+import { POST as recordProcurementEvent } from '@/app/api/procurement/[id]/events/route';
 import type { Procurement } from '@/lib/types';
 
 describe('marketplace adapters', () => {
@@ -53,6 +55,49 @@ describe('cost estimator', () => {
     expect(json.ok).toBe(true);
     expect(json.data.rialoWorkflowId).toBe(`mock_workflow_${json.data.id}`);
     expect(json.data.events[0].procurementId).toBe(json.data.id);
+  });
+
+
+  it('recovers an existing procurement by id', async () => {
+    const estimate = estimateCosts({ product, quantity: 3, destination: 'Abuja', shippingPreference: 'air', deliveryPreference: 'local_delivery', weightKg: 1, lengthCm: 20, widthCm: 20, heightCm: 20, declaredValue: 150000 });
+    db.saveEstimate(estimate);
+    const createdResponse = await createProcurement(new Request('http://localhost/api/procurement', { method: 'POST', body: JSON.stringify({ estimateId: estimate.id }) }));
+    const createdJson = await createdResponse.json();
+
+    const recoveredResponse = await getProcurement(new Request(`http://localhost/api/procurement/${createdJson.data.id}`), { params: Promise.resolve({ id: createdJson.data.id }) });
+    const recoveredJson = await recoveredResponse.json();
+
+    expect(recoveredJson.ok).toBe(true);
+    expect(recoveredJson.data.id).toBe(createdJson.data.id);
+    expect(recoveredJson.data.productName).toBe(createdJson.data.productName);
+    expect(recoveredJson.data.events).toHaveLength(1);
+    expect(recoveredJson.data.workflow.status).toBe('MOCKED_DISCONNECTED');
+  });
+
+  it('returns a clear not found response for invalid procurement recovery', async () => {
+    const response = await getProcurement(new Request('http://localhost/api/procurement/pr_missing'), { params: Promise.resolve({ id: 'pr_missing' }) });
+    const json = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(json.ok).toBe(false);
+    expect(json.error.message).toBe('Procurement not found.');
+  });
+
+  it('advances events on a recovered procurement record', async () => {
+    const estimate = estimateCosts({ product, quantity: 4, destination: 'Lagos', shippingPreference: 'sea', deliveryPreference: 'pickup', weightKg: 1, lengthCm: 20, widthCm: 20, heightCm: 20, declaredValue: 200000 });
+    db.saveEstimate(estimate);
+    const createdResponse = await createProcurement(new Request('http://localhost/api/procurement', { method: 'POST', body: JSON.stringify({ estimateId: estimate.id }) }));
+    const createdJson = await createdResponse.json();
+    const id = createdJson.data.id;
+
+    await getProcurement(new Request(`http://localhost/api/procurement/${id}`), { params: Promise.resolve({ id }) });
+    const updatedResponse = await recordProcurementEvent(new Request(`http://localhost/api/procurement/${id}/events`, { method: 'POST', body: JSON.stringify({ newState: 'SUPPLIER_SELECTED', type: 'SUPPLIER_SELECTED', data: { source: 'test' } }) }), { params: Promise.resolve({ id }) });
+    const updatedJson = await updatedResponse.json();
+
+    expect(updatedJson.ok).toBe(true);
+    expect(updatedJson.data.state).toBe('SUPPLIER_SELECTED');
+    expect(updatedJson.data.events).toHaveLength(2);
+    expect(updatedJson.data.events.at(-1).procurementId).toBe(id);
   });
 
   it('flags customs uncertainty and demo rates', () => {
