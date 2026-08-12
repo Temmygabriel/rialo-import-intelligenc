@@ -5,3 +5,6 @@ out
 *.tsbuildinfo
 .vercel
 coverage
+rialo-worker/target/
+rialo-worker/Cargo.lock
+rialo-worker/examples/
