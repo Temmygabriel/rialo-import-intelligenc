@@ -1,13 +1,19 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use rialo_cdk::{
     keyring::{FileKeyringProvider, KeyringProvider},
     rpc::{types::Pubkey, HttpRpcClient},
     RpcClient, TransactionBuilder,
 };
 use serde::Serialize;
-use std::{path::Path, str::FromStr, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    env,
+    io::{self, Write},
+    path::Path,
+    str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use rialo_worker::WorkerConfig;
+use rialo_worker::{WalletSetupConfig, WorkerConfig, DEVNET_KEYRING_NAME, DEVNET_MNEMONIC_STRENGTH_BITS};
 
 #[derive(Debug, Serialize)]
 struct WorkerOutput {
@@ -26,6 +32,77 @@ struct WorkerOutput {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    match env::args().nth(1).as_deref() {
+        Some("setup-wallet") => setup_wallet().await,
+        Some(command) => Err(anyhow!("unsupported rialo-worker command: {command}")),
+        None => run_transaction_worker().await,
+    }
+}
+
+async fn setup_wallet() -> Result<()> {
+    let config = WalletSetupConfig::new(FileKeyringProvider::default_path())?;
+    let keyring_file = config.keyring_file();
+
+    if keyring_file.exists() {
+        return Err(anyhow!(
+            "keyring already exists at {}; refusing to overwrite it",
+            keyring_file.display()
+        ));
+    }
+
+    std::fs::create_dir_all(&config.keyring_path).with_context(|| {
+        format!("failed to create Rialo keyring directory {}", config.keyring_path.display())
+    })?;
+
+    let password = read_password_once("Enter password for new Rialo DevNet keyring: ")?;
+    let confirmation = read_password_once("Confirm password for new Rialo DevNet keyring: ")?;
+    if password != confirmation {
+        return Err(anyhow!("keyring password confirmation did not match"));
+    }
+    if password.trim().is_empty() {
+        return Err(anyhow!("keyring password must not be empty"));
+    }
+
+    let provider = FileKeyringProvider::new(Path::new(&config.keyring_path));
+    let (created_keyring, mnemonic) = provider
+        .create_with_mnemonic(&config.keyring_name, DEVNET_MNEMONIC_STRENGTH_BITS, &password)
+        .await
+        .context("failed to create encrypted Rialo keyring")?;
+    let created_pubkey = created_keyring.pubkey();
+
+    let loaded_keyring = provider
+        .load(&config.keyring_name, &password)
+        .await
+        .context("created keyring could not be loaded with the supplied password")?;
+    let loaded_pubkey = loaded_keyring.pubkey();
+    if loaded_pubkey != created_pubkey {
+        return Err(anyhow!("created keyring pubkey did not match reloaded keyring pubkey"));
+    }
+
+    println!("WALLET CREATED: YES");
+    println!("KEYRING NAME: {DEVNET_KEYRING_NAME}");
+    println!("PUBLIC ADDRESS: {created_pubkey}");
+    println!("KEYRING DIRECTORY: {}", config.keyring_path.display());
+    println!("KEYRING FILE: {}", keyring_file.display());
+    println!("RELOAD VERIFIED: YES");
+    println!("MNEMONIC GENERATED: YES");
+    println!("RECOVERY MNEMONIC - SAVE THIS NOW; IT WILL NOT BE WRITTEN TO DISK:");
+    println!("{mnemonic}");
+    println!("RECOVERY: keep the encrypted keyring file, this password, and the mnemonic in a secure vault. Later load this wallet with FileKeyringProvider::new(KEYRING_DIRECTORY).load(\"{DEVNET_KEYRING_NAME}\", password). Use recover_from_mnemonic only if the encrypted keyring file is lost.");
+    println!("FUNDED: UNKNOWN");
+
+    Ok(())
+}
+
+fn read_password_once(prompt: &str) -> Result<String> {
+    print!("{prompt}");
+    io::stdout().flush().context("failed to flush password prompt")?;
+    let mut password = String::new();
+    io::stdin().read_line(&mut password).context("failed to read keyring password")?;
+    Ok(password.trim_end_matches(['\r', '\n']).to_string())
+}
+
+async fn run_transaction_worker() -> Result<()> {
     let config = WorkerConfig::from_env()?;
     let client = HttpRpcClient::new(config.rpc_url.clone());
 

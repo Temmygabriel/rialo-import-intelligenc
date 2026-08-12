@@ -38,6 +38,20 @@ The worker is designed around the documented public Rust CDK APIs:
 - `RpcClient::send_and_confirm_transaction(...)` for submission plus confirmation.
 - `RpcClient::get_signature_statuses(...)` and `RpcClient::get_transaction(...)` for post-confirmation retrieval.
 
+
+## One-time wallet setup
+
+Create the persistent encrypted DevNet keyring before attempting any transaction:
+
+```bash
+cd rialo-worker
+# Optional: set RIALO_KEYRING_PATH to an absolute path outside this Git repository.
+# If omitted, FileKeyringProvider::default_path() is used.
+cargo run -- setup-wallet
+```
+
+The setup command uses `FileKeyringProvider::create_with_mnemonic("import-intelligence-devnet", 128, password)`, asks for the password interactively, refuses to overwrite an existing `import-intelligence-devnet.keyring`, reloads the keyring with `KeyringProvider::load(...)`, and verifies the reloaded public key matches the created public key. It prints the recovery mnemonic exactly once so it can be saved in a secure vault; it never writes the mnemonic, raw private key, or password to a file.
+
 ## Environment variables
 
 The worker reads configuration only from environment variables:
