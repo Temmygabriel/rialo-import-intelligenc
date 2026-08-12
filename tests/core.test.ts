@@ -4,7 +4,7 @@ import { calculateCbm, calculateChargeableAirWeight, calculateVolumetricWeightKg
 import { estimateCosts } from '@/lib/costs/estimator';
 import { scoreSupplier } from '@/lib/suppliers/scoring';
 import { transitionProcurement } from '@/lib/procurement/state-machine';
-import { MockRialoAdapter } from '@/lib/rialo/adapter';
+import { MockRialoAdapter, RealRialoAdapter, getRialoAdapter } from '@/lib/rialo/adapter';
 import { db } from '@/lib/db/memory';
 import { POST as createProcurement } from '@/app/api/procurement/route';
 import { GET as getProcurement } from '@/app/api/procurement/[id]/route';
@@ -136,5 +136,35 @@ describe('Rialo adapter abstraction', () => {
     const workflow = await adapter.createProcurementWorkflow({ procurementId:'pr1' });
     expect(workflow.status).toBe('MOCKED');
     expect(workflow.workflowId).toContain('mock_workflow');
+  });
+});
+
+// Additional Rialo integration-boundary coverage keeps real devnet probing honest without
+// inventing transaction, workflow, wallet, payment, escrow, or procurement execution APIs.
+describe('Rialo real adapter configuration boundary', () => {
+  it('falls back to mock when real Rialo configuration is absent', async () => {
+    const adapter = getRialoAdapter({ RIALO_ADAPTER: 'real' });
+    const workflow = await adapter.createProcurementWorkflow({ procurementId: 'pr_unconfigured' });
+
+    expect(workflow.status).toBe('MOCKED');
+    expect(workflow.workflowId).toBe('mock_workflow_pr_unconfigured');
+  });
+
+  it('initializes the real adapter when devnet RPC configuration is present', async () => {
+    const fetchImpl = async () => new Response('ok', { status: 200 });
+    const adapter = new RealRialoAdapter({ rpcUrl: 'http://devnet.rialo.io:4100', fetchImpl });
+    const workflow = await adapter.createProcurementWorkflow({ procurementId: 'pr_real' });
+    const status = await adapter.getWorkflowStatus(workflow.workflowId);
+
+    expect(workflow).toEqual({ workflowId: 'rialo_probe_workflow_pr_real', status: 'CONNECTED' });
+    expect(status.status).toBe('CONNECTED_PROBE_ONLY');
+    expect(status.note).toMatch(/reachability only|No workflow/);
+  });
+
+  it('surfaces real Rialo connectivity failures without falling through to mocked success', async () => {
+    const fetchImpl = async () => new Response('unavailable', { status: 503 });
+    const adapter = new RealRialoAdapter({ rpcUrl: 'http://devnet.rialo.io:4100', fetchImpl });
+
+    await expect(adapter.recordProcurementEvent({ procurementId: 'pr_real', eventId: 'evt_real', type: 'STATE_TRANSITION' })).rejects.toThrow(/HTTP 503/);
   });
 });

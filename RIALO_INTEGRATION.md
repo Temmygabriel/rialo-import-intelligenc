@@ -6,18 +6,41 @@ The project treats `RIALO_TECHNICAL_RESEARCH.md` as the current research source.
 
 Rialo is isolated behind `lib/rialo/adapter.ts`.
 
-The active implementation is `MockRialoAdapter`, which supports:
+The adapter now supports two modes:
 
-- `createQuoteSnapshot()`
-- `recordProcurementEvent()`
-- `createProcurementWorkflow()`
-- `getWorkflowStatus()`
+- `MockRialoAdapter` fallback, which keeps all existing API/UI contracts working without Rialo configuration.
+- `RealRialoAdapter` devnet reachability probe, which calls the verified Rialo devnet RPC base URL only to confirm connectivity.
 
-It does not call Rialo devnet, wallets, browser APIs, RPC endpoints, or Venus workflows.
+The real adapter does **not** create or submit Rialo workflows, transactions, payments, escrow releases, freight bookings, warehouse operations, customs brokerage actions, or live procurement execution.
 
-## Why mock only
+## Verified real integration point
 
-The research found verified Rust/Venus examples and devnet CLI hints, but exact browser wallet APIs, chain IDs, status-query APIs, and complete deployment commands remain unverified. The MVP must not invent Rialo APIs.
+The only real Rialo capability currently implemented is a server-side HTTP reachability check against the verified devnet RPC endpoint from the research:
+
+```text
+http://devnet.rialo.io:4100
+```
+
+This is intentionally the smallest safe integration boundary because the repository research verifies the devnet RPC base URL but still marks exact transaction, status-query, browser wallet, and deployment APIs as unknown.
+
+## Configuration
+
+Mock fallback is the default. To enable the real devnet reachability probe, configure:
+
+```bash
+RIALO_ADAPTER=real
+RIALO_NETWORK=devnet
+RIALO_RPC_URL=http://devnet.rialo.io:4100
+```
+
+No Rialo secrets, private keys, wallet credentials, or API tokens are required for the current reachability-only integration.
+
+## What remains mocked
+
+- Quote snapshot anchoring.
+- Procurement workflow creation.
+- Procurement event recording.
+- Workflow status beyond endpoint reachability.
 
 ## Future workflow target
 
