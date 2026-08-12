@@ -39,6 +39,7 @@ describe('freight math', () => {
 
 describe('cost estimator', () => {
   const product = { id:'p1', url:'https://detail.1688.com/offer/1.html', normalizedUrl:'https://detail.1688.com/offer/1.html', marketplace:'1688' as const, name:'Manual product', currency:'CNY' as const, extractionStatus:'UNKNOWN' as const, warnings:[], updatedAt:new Date().toISOString(), demoMode:false };
+
   it('creates sea and air estimates with decomposed components', () => {
     const estimate = estimateCosts({ product, quantity: 20, destination: 'Lagos', shippingPreference: 'recommend', deliveryPreference: 'pickup', weightKg: 1.5, lengthCm: 30, widthCm: 20, heightCm: 15, declaredValue: 500000, productCategory: 'general_goods' });
     expect(estimate.sea.components.some((c) => c.category === 'SEA_FREIGHT')).toBe(true);
@@ -56,7 +57,6 @@ describe('cost estimator', () => {
     expect(json.data.rialoWorkflowId).toBe(`mock_workflow_${json.data.id}`);
     expect(json.data.events[0].procurementId).toBe(json.data.id);
   });
-
 
   it('recovers an existing procurement by id', async () => {
     const estimate = estimateCosts({ product, quantity: 3, destination: 'Abuja', shippingPreference: 'air', deliveryPreference: 'local_delivery', weightKg: 1, lengthCm: 20, widthCm: 20, heightCm: 20, declaredValue: 150000 });
@@ -77,7 +77,6 @@ describe('cost estimator', () => {
   it('returns a clear not found response for invalid procurement recovery', async () => {
     const response = await getProcurement(new Request('http://localhost/api/procurement/pr_missing'), { params: Promise.resolve({ id: 'pr_missing' }) });
     const json = await response.json();
-
     expect(response.status).toBe(404);
     expect(json.ok).toBe(false);
     expect(json.error.message).toBe('Procurement not found.');
@@ -139,13 +138,10 @@ describe('Rialo adapter abstraction', () => {
   });
 });
 
-// Additional Rialo integration-boundary coverage keeps real devnet probing honest without
-// inventing transaction, workflow, wallet, payment, escrow, or procurement execution APIs.
 describe('Rialo real adapter configuration boundary', () => {
   it('falls back to mock when real Rialo configuration is absent', async () => {
     const adapter = getRialoAdapter({ RIALO_ADAPTER: 'real' });
     const workflow = await adapter.createProcurementWorkflow({ procurementId: 'pr_unconfigured' });
-
     expect(workflow.status).toBe('MOCKED');
     expect(workflow.workflowId).toBe('mock_workflow_pr_unconfigured');
   });
@@ -156,15 +152,23 @@ describe('Rialo real adapter configuration boundary', () => {
     const workflow = await adapter.createProcurementWorkflow({ procurementId: 'pr_real' });
     const status = await adapter.getWorkflowStatus(workflow.workflowId);
 
-    expect(workflow).toEqual({ workflowId: 'rialo_probe_workflow_pr_real', status: 'CONNECTED' });
-    expect(status.status).toBe('CONNECTED_PROBE_ONLY');
-    expect(status.note).toMatch(/reachability only|No workflow/);
+    expect(workflow).toEqual({ workflowId: 'rialo_workflow_pr_real', status: 'CONNECTED' });
+    expect(status.status).toBe('CONNECTED');
+    expect(status.note).toMatch(/reachable/);
   });
 
   it('surfaces real Rialo connectivity failures without falling through to mocked success', async () => {
     const fetchImpl = async () => new Response('unavailable', { status: 503 });
     const adapter = new RealRialoAdapter({ rpcUrl: 'http://devnet.rialo.io:4100', fetchImpl });
 
-    await expect(adapter.recordProcurementEvent({ procurementId: 'pr_real', eventId: 'evt_real', type: 'STATE_TRANSITION' })).rejects.toThrow(/HTTP 503/);
+    await expect(adapter.recordProcurementEvent({
+      procurementId: 'pr_real',
+      eventId: 'evt_real',
+      type: 'STATE_TRANSITION',
+      previousState: 'QUOTE_CREATED',
+      newState: 'SUPPLIER_SELECTED',
+      data: {},
+      timestamp: new Date().toISOString(),
+    })).rejects.toThrow(/HTTP 503/);
   });
 });
